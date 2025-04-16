@@ -43,6 +43,7 @@ interface GoogleData {
 interface AuthContextType {
   user: User | null
   loading: boolean
+  isChecking: boolean
   error: string | null
   googleData: GoogleData | null
   profile: any | null
@@ -64,6 +65,7 @@ export { AuthContext };
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isChecking, setIsChecking] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [googleData, setGoogleData] = useState<GoogleData | null>(null)
   const [profile, setProfile] = useState<any | null>(null)
@@ -72,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setIsChecking(true)
       if (firebaseUser) {
         try {
           console.log("Utilisateur authentifié:", firebaseUser.email)
@@ -157,6 +160,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsProfileComplete(false)
       }
       setLoading(false)
+      setIsChecking(false)
     })
 
     return () => unsubscribe()
@@ -327,6 +331,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = {
     user,
     loading,
+    isChecking,
     error,
     googleData,
     profile,

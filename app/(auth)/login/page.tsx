@@ -19,17 +19,17 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { signIn, signInWithGoogle, user, resetPassword } = useAuth()
+  const { signIn, signInWithGoogle, user, isChecking, resetPassword } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirect = searchParams.get("redirect") || "/dashboard"
 
-  // Rediriger si déjà connecté
+  // Rediriger si déjà connecté et que la vérification est terminée
   useEffect(() => {
-    if (user) {
+    if (!isChecking && user) {
       router.push(redirect)
     }
-  }, [user, router, redirect])
+  }, [user, router, redirect, isChecking])
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
@@ -116,6 +116,20 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Afficher un état de chargement pendant la vérification de l'authentification
+  if (isChecking) {
+    return (
+      <div className="container flex min-h-[calc(100vh-4rem)] max-w-md flex-col items-center justify-center py-8">
+        <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
+          <div className="flex flex-col items-center space-y-2 text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">Vérification de l'authentification...</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
