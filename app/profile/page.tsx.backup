@@ -1,0 +1,290 @@
+'use client';
+
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { useAuth } from '@/hooks/use-auth';
+import { useProfile } from '@/hooks/use-profile';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { PersonalInfoForm } from '@/components/profile/PersonalInfoForm';
+import { EducationForm } from '@/components/profile/EducationForm';
+import { DocumentsForm } from '@/components/profile/DocumentsForm';
+import { Button } from '@/components/ui/button';
+import { AlertCircle } from 'lucide-react';
+import { useToast } from "@/components/ui/use-toast";
+import { motion } from "framer-motion";
+import { useMediaQuery } from "@/hooks/use-media-query";
+import { ProfileFormProvider, useProfileForm } from '@/context/profile-context';
+import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import { Profil } from '@/types/profil';
+
+export default function ProfilePage() {
+  const { user, loading: authLoading } = useAuth();
+  const { profile, loading: profileLoading, error, updateProfile } = useProfile();
+  const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState('personal');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [completedSteps, setCompletedSteps] = useState({
+    personal: false,
+    education: false,
+    documents: false,
+  });
+  const isMobile = useMediaQuery("(max-width: 768px)");
+  
+  // Utiliser des refs pour suivre les valeurs sans déclencher de re-rendus
+  const completedStepsRef = useRef(completedSteps);
+  const isSubmittingRef = useRef(isSubmitting);
+  const activeTabRef = useRef(activeTab);
+  
+  // Mettre à jour les refs lorsque les valeurs changent
+  useEffect(() => {
+    completedStepsRef.current = completedSteps;
+  }, [completedSteps]);
+  
+  useEffect(() => {
+    isSubmittingRef.current = isSubmitting;
+  }, [isSubmitting]);
+  
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  // Vérifier si toutes les étapes sont complétées
+  const allStepsCompleted = Object.values(completedSteps).every(step => step === true);
+
+  // Fonction pour mettre à jour le statut de complétion d'une section
+  const handleUpdate = useCallback((section: string, isCompleted: boolean) => {
+    setCompletedSteps(prev => ({
+      ...prev,
+      [section]: isCompleted
+    }));
+  }, []);
+
+  if (authLoading || profileLoading) {
+    return (
+      <div className="container mx-auto py-8 space-y-8">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid gap-6">
+          <Skeleton className="h-[400px] w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto py-8">
+        <Card className="border-destructive">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-5 w-5" />
+              Erreur
+            </CardTitle>
+            <CardDescription>{error}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              Réessayer
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="container mx-auto py-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Accès non autorisé</CardTitle>
+            <CardDescription>
+              Vous devez être connecté pour accéder à cette page.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <ProfileFormProvider initialProfile={profile}>
+      <ProfilePageContent 
+        user={user} 
+        profile={profile} 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        isSubmitting={isSubmitting} 
+        setIsSubmitting={setIsSubmitting} 
+        completedSteps={completedSteps} 
+        handleUpdate={handleUpdate} 
+        isMobile={isMobile} 
+        allStepsCompleted={allStepsCompleted} 
+      />
+    </ProfileFormProvider>
+  );
+}
+
+// Composant de contenu séparé pour éviter les problèmes de hooks
+function ProfilePageContent({ 
+  user, 
+  profile, 
+  activeTab, 
+  setActiveTab, 
+  isSubmitting, 
+  setIsSubmitting, 
+  completedSteps, 
+  handleUpdate, 
+  isMobile, 
+  allStepsCompleted 
+}: { 
+  user: any; 
+  profile: any; 
+  activeTab: string; 
+  setActiveTab: (tab: string) => void; 
+  isSubmitting: boolean; 
+  setIsSubmitting: (value: boolean) => void; 
+  completedSteps: any; 
+  handleUpdate: (section: string, isCompleted: boolean) => void; 
+  isMobile: boolean; 
+  allStepsCompleted: boolean; 
+}) {
+  const { formData, resetFormData } = useProfileForm();
+  const { toast } = useToast();
+  
+  // Fonction pour soumettre le formulaire
+  const handleSubmit = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      setIsSubmitting(true);
+      const db = getFirestore();
+      const profileRef = doc(db, "profiles", user.uid);
+
+      // Récupérer les données actuelles du profil
+      const profileDoc = await getDoc(profileRef);
+      const currentProfile = profileDoc.data() as Profil | undefined;
+
+      // Préparer les données à mettre à jour
+      const updates: Partial<Profil> = {
+        chercheur: {
+          ...currentProfile?.chercheur,
+          ...formData.personal,
+          formations: formData.education.formations,
+          cv: formData.documents.cvUrl,
+          photoProfil: formData.documents.photoProfilUrl,
+          updatedAt: new Date().toISOString(),
+        },
+      };
+
+      // Mettre à jour le profil dans Firestore
+      await setDoc(profileRef, updates, { merge: true });
+
+      // Mettre à jour le statut de complétion
+      handleUpdate("personal", true);
+      handleUpdate("education", true);
+      handleUpdate("documents", true);
+
+      // Réinitialiser les données du formulaire et vider le localStorage
+      resetFormData();
+      localStorage.removeItem("profile-form-data");
+      
+      toast.success("Profil mis à jour avec succès");
+    } catch (error) {
+      console.error("Erreur lors de la mise à jour du profil:", error);
+      toast.error("Erreur lors de la mise à jour du profil");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [user, formData, resetFormData, handleUpdate, toast, setIsSubmitting]);
+  
+  return (
+    <div className="container mx-auto py-8 px-4">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <h1 className="text-3xl font-bold mb-8">Mon Profil</h1>
+
+        {isMobile ? (
+          // Version mobile - uniquement les informations personnelles
+          <Card className="p-6">
+            <PersonalInfoForm
+              initialData={profile}
+            />
+            {completedSteps.personal && (
+              <div className="mt-6">
+                <Button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                  className="w-full"
+                >
+                  {isSubmitting ? "Enregistrement..." : "Enregistrer le profil"}
+                </Button>
+              </div>
+            )}
+          </Card>
+        ) : (
+          // Version desktop - toutes les sections avec onglets
+          <div className="space-y-6">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="personal" className="relative">
+                  Informations personnelles
+                  {completedSteps.personal && (
+                    <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-green-500"></span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="education" className="relative">
+                  Formation
+                  {completedSteps.education && (
+                    <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-green-500"></span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="documents" className="relative">
+                  Documents
+                  {completedSteps.documents && (
+                    <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-green-500"></span>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="personal">
+                <PersonalInfoForm
+                  initialData={profile}
+                />
+              </TabsContent>
+
+              <TabsContent value="education">
+                <EducationForm
+                  profile={profile}
+                  onUpdate={(data) => handleUpdate("education", true)}
+                />
+              </TabsContent>
+
+              <TabsContent value="documents">
+                <DocumentsForm
+                  profile={profile}
+                  onUpdate={(data) => handleUpdate("documents", true)}
+                />
+              </TabsContent>
+            </Tabs>
+
+            {allStepsCompleted && (
+              <div className="mt-6">
+                <Button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                  className="w-full"
+                >
+                  {isSubmitting ? "Enregistrement..." : "Enregistrer le profil"}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+      </motion.div>
+    </div>
+  );
+} 
