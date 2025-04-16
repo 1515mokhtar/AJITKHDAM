@@ -1,37 +1,55 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
-import { getAuth } from "@clerk/nextjs/server"
+import { auth } from "@/lib/firebase/config"
 import { isCompanyProfileComplete } from "./lib/firebase/company"
 
-export async function middleware(request: NextRequest) {
-  const { userId, sessionClaims } = getAuth(request)
-  const role = sessionClaims?.role as string | undefined
+// Liste des routes publiques qui ne nécessitent pas d'authentification
+const publicRoutes = ["/login", "/register", "/forgot-password", "/sign-in"]
 
-  // Si l'utilisateur n'est pas connecté, rediriger vers la page de connexion
-  if (!userId) {
-    return NextResponse.redirect(new URL("/sign-in", request.url))
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
+  // Si c'est une route publique, on laisse passer
+  if (publicRoutes.includes(pathname)) {
+    return NextResponse.next()
   }
 
-  // Si l'utilisateur a le rôle "company"
-  if (role === "company") {
-    // Ne pas vérifier le profil sur la page de profil elle-même
-    if (!request.nextUrl.pathname.startsWith("/company/profile")) {
+  // Vérifier si l'utilisateur est authentifié
+  const token = request.cookies.get("firebase-auth-token")?.value
+
+  if (!token) {
+    // Si pas de token, rediriger vers la page de connexion
+    return NextResponse.redirect(new URL("/login", request.url))
+  }
+
+  try {
+    // Vérifier le token Firebase
+    const decodedToken = await auth.verifyIdToken(token)
+    const userId = decodedToken.uid
+
+    // Si l'utilisateur est une entreprise, vérifier si son profil est complet
+    if (pathname.startsWith("/company") && !pathname.startsWith("/company/profile")) {
       const isProfileComplete = await isCompanyProfileComplete(userId)
       
-      // Si le profil n'est pas complet, rediriger vers la page de profil
       if (!isProfileComplete) {
         return NextResponse.redirect(new URL("/company/profile", request.url))
       }
     }
-  }
 
-  return NextResponse.next()
+    return NextResponse.next()
+  } catch (error) {
+    // Si le token est invalide, rediriger vers la page de connexion
+    return NextResponse.redirect(new URL("/login", request.url))
+  }
 }
 
 // Configurer les chemins qui déclenchent le middleware
 export const config = {
   matcher: [
+    "/dashboard",
     "/company/:path*",
     "/jobs/post",
+    "/profile",
+    "/mes-offres",
   ]
 } 
