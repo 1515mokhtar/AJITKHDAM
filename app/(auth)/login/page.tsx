@@ -1,242 +1,125 @@
 "use client"
 
-import type React from "react"
-import { useState, useEffect, useRef } from "react"
-import Link from "next/link"
+import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { useAuth } from "@/context/auth-context"
-import { Loader2, AlertCircle } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { onAuthStateChanged } from "firebase/auth"
+import { doc, getDoc } from "firebase/firestore"
+import { auth, db } from "@/lib/firebase"
+import { LoginForm } from "@/components/auth/login-form"
+import { Loader2 } from "lucide-react"
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const [isLoading, setIsLoading] = useState(false)
-  const [googleLoading, setGoogleLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const { signIn, signInWithGoogle, user, isChecking, resetPassword } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirect = searchParams.get("redirect") || "/dashboard"
-  const hasRedirected = useRef(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [hasRedirected, setHasRedirected] = useState(false)
 
-  // Rediriger si déjà connecté et que la vérification est terminée
   useEffect(() => {
-    if (!isChecking && user && !hasRedirected.current) {
-      if (user.role === "chercheur") {
-        hasRedirected.current = true
-        router.push(redirect)
+    // Fonction pour gérer la redirection en fonction du rôle
+    const handleRoleBasedRedirect = async (uid: string) => {
+      try {
+        const userDoc = await getDoc(doc(db, "users", uid))
+        const userData = userDoc.data()
+
+        if (!userData) {
+          setIsLoading(false)
+          return
+        }
+
+        const role = userData.role
+        const redirectPath = searchParams.get("redirect") || getDefaultRedirectPath(role)
+        
+        // Éviter les redirections multiples
+        if (!hasRedirected) {
+          setHasRedirected(true)
+          router.push(redirectPath)
+        }
+      } catch (error) {
+        console.error("Erreur lors de la récupération du rôle:", error)
+        setIsLoading(false)
       }
     }
-  }, [user, router, redirect, isChecking])
 
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {}
-
-    if (!email.trim()) {
-      newErrors.email = "L'email est requis"
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      newErrors.email = "Format d'email invalide"
-    }
-
-    if (!password) {
-      newErrors.password = "Le mot de passe est requis"
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!validateForm()) {
-      return
-    }
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      await signIn(email, password)
-      // La redirection sera gérée par l'effet useEffect
-    } catch (error: any) {
-      console.error("Erreur inattendue lors de la connexion:", error)
-      setError("Une erreur inattendue s'est produite. Veuillez réessayer.")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleGoogleSignIn = async () => {
-    setGoogleLoading(true)
-    setError(null)
-
-    try {
-      console.log("Démarrage de la connexion Google depuis la page de connexion")
-      const result = await signInWithGoogle()
-
-      if (result.success) {
-        console.log("Connexion Google réussie")
-        // La redirection sera gérée par l'effet useEffect
-      } else if (result.isNewUser) {
-        // Rediriger vers la page d'inscription si c'est un nouvel utilisateur
-        console.log("Nouvel utilisateur Google, redirection vers l'inscription")
-        router.push("/register?provider=google")
+    // Fonction pour déterminer le chemin de redirection par défaut
+    const getDefaultRedirectPath = (role: string) => {
+      switch (role) {
+        case "chercheur":
+          return "/profile"
+        case "staff":
+          return "/admin"
+        case "company":
+          return "/profile/entdetails"
+        default:
+          return "/dashboard"
       }
-    } catch (error: any) {
-      console.error("Erreur inattendue lors de la connexion Google:", error)
-      setError("Échec de la connexion avec Google. Veuillez réessayer.")
-    } finally {
-      setGoogleLoading(false)
-    }
-  }
-
-  const handleForgotPassword = async () => {
-    if (!email.trim()) {
-      setErrors({ email: "Veuillez entrer votre adresse email" })
-      return
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setErrors({ email: "Veuillez entrer une adresse email valide" })
-      return
-    }
+    // Observer les changements d'état d'authentification
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        await handleRoleBasedRedirect(user.uid)
+      } else {
+        setIsLoading(false)
+      }
+    })
 
-    setIsLoading(true)
+    // Nettoyer l'abonnement
+    return () => unsubscribe()
+  }, [router, searchParams, hasRedirected])
 
-    try {
-      await resetPassword(email)
-    } catch (error) {
-      console.error("Erreur inattendue lors de la réinitialisation du mot de passe:", error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Afficher un état de chargement pendant la vérification de l'authentification
-  if (isChecking) {
+  // Afficher un loader pendant l'initialisation
+  if (isLoading) {
     return (
-      <div className="container flex min-h-[calc(100vh-4rem)] max-w-md flex-col items-center justify-center py-8">
-        <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
-          <div className="flex flex-col items-center space-y-2 text-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Vérification de l'authentification...</p>
-          </div>
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="flex flex-col items-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Vérification de l'authentification...</p>
         </div>
       </div>
     )
   }
 
+  // Afficher le formulaire de connexion une fois l'initialisation terminée
   return (
-    <div className="container flex min-h-[calc(100vh-4rem)] max-w-md flex-col items-center justify-center py-8">
-      <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
-        <div className="flex flex-col space-y-2 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">Bienvenue</h1>
-          <p className="text-sm text-muted-foreground">Entrez vos identifiants pour vous connecter à votre compte</p>
-        </div>
-
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email" className="flex items-center justify-between">
-              Email
-              {errors.email && <span className="text-xs font-normal text-destructive">{errors.email}</span>}
-            </Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="nom@exemple.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={errors.email ? "border-destructive" : ""}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="password" className="flex items-center">
-                Mot de passe
-                {errors.password && (
-                  <span className="ml-2 text-xs font-normal text-destructive">{errors.password}</span>
-                )}
-              </Label>
-              <Button
-                variant="link"
-                className="px-0 text-xs font-normal"
-                type="button"
-                onClick={handleForgotPassword}
-                disabled={isLoading}
-              >
-                Mot de passe oublié ?
-              </Button>
-            </div>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className={errors.password ? "border-destructive" : ""}
-            />
-          </div>
-
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Connexion en cours...
-              </>
-            ) : (
-              "Se connecter"
-            )}
-          </Button>
-        </form>
-
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-background px-2 text-muted-foreground">Ou continuer avec</span>
-          </div>
-        </div>
-
-        <Button
-          variant="outline"
-          type="button"
-          onClick={handleGoogleSignIn}
-          disabled={googleLoading}
-          className="w-full"
-        >
-          {googleLoading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Connexion avec Google...
-            </>
-          ) : (
-            "Google"
-          )}
-        </Button>
-
-        <p className="px-8 text-center text-sm text-muted-foreground">
-          Vous n&apos;avez pas de compte ?{" "}
-          <Link
-            href={`/register${redirect !== "/dashboard" ? `?redirect=${redirect}` : ""}`}
-            className="underline underline-offset-4 hover:text-primary"
+    <div className="container relative h-screen flex-col items-center justify-center grid lg:max-w-none lg:grid-cols-2 lg:px-0">
+      <div className="relative hidden h-full flex-col bg-muted p-10 text-white lg:flex dark:border-r">
+        <div className="absolute inset-0 bg-zinc-900" />
+        <div className="relative z-20 flex items-center text-lg font-medium">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="mr-2 h-6 w-6"
           >
-            S&apos;inscrire
-          </Link>
-        </p>
+            <path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3" />
+          </svg>
+          Job Finder
+        </div>
+        <div className="relative z-20 mt-auto">
+          <blockquote className="space-y-2">
+            <p className="text-lg">
+              &ldquo;Trouvez le job de vos rêves avec notre plateforme de recherche d'emploi.&rdquo;
+            </p>
+            <footer className="text-sm">Sofia Davis</footer>
+          </blockquote>
+        </div>
+      </div>
+      <div className="lg:p-8">
+        <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
+          <div className="flex flex-col space-y-2 text-center">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Connectez-vous à votre compte
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Entrez vos identifiants pour accéder à votre compte
+            </p>
+          </div>
+          <LoginForm />
+        </div>
       </div>
     </div>
   )
