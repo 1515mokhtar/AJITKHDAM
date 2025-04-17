@@ -25,7 +25,7 @@ export default function ProfilePage() {
     )
   }
 
-  if (!user || user.role !== "company") {
+  if (!user ) {
     return null
   }
 
