@@ -15,6 +15,7 @@ import { saveCompanyProfile, getCompanyProfile } from "@/lib/firebase/company-pr
 import { supabase } from "@/lib/supabase"
 import { getFirestore } from "firebase/firestore"
 import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore"
+import { RouteProtector } from "@/components/auth/route-protector"
 
 interface CompanyProfile {
   companyName: string
@@ -27,7 +28,7 @@ interface CompanyProfile {
   urlLogo?: string
 }
 
-export default function EntDetailsPage() {
+export default function EntrepriseDetailsPage() {
   const { user } = useAuth()
   const router = useRouter()
   const [isChecking, setIsChecking] = useState(true)
@@ -183,147 +184,149 @@ export default function EntDetailsPage() {
   }
 
   return (
-    <div className="container py-8">
-      <Card className="max-w-2xl mx-auto">
-        <CardHeader>
-          <CardTitle>Profil Entreprise</CardTitle>
-          <CardDescription>
-            {isProfileComplete 
-              ? "Gérez les informations de votre entreprise"
-              : "Complétez votre profil entreprise pour commencer à publier des offres"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Logo de l'entreprise */}
-            <div className="space-y-2">
-              <Label>Logo de l'entreprise</Label>
-              <div className="flex items-center gap-4">
-                <div className="relative w-24 h-24 border rounded-lg overflow-hidden">
-                  {logoPreview ? (
-                    <Image
-                      src={logoPreview}
-                      alt="Logo preview"
-                      fill
-                      className="object-cover"
+    <RouteProtector allowedRoles={["company"]}>
+      <div className="container py-8">
+        <Card className="max-w-2xl mx-auto">
+          <CardHeader>
+            <CardTitle>Profil Entreprise</CardTitle>
+            <CardDescription>
+              {isProfileComplete 
+                ? "Gérez les informations de votre entreprise"
+                : "Complétez votre profil entreprise pour commencer à publier des offres"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Logo de l'entreprise */}
+              <div className="space-y-2">
+                <Label>Logo de l'entreprise</Label>
+                <div className="flex items-center gap-4">
+                  <div className="relative w-24 h-24 border rounded-lg overflow-hidden">
+                    {logoPreview ? (
+                      <Image
+                        src={logoPreview}
+                        alt="Logo preview"
+                        fill
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-muted">
+                        <Building2 className="h-8 w-8 text-muted-foreground" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoChange}
+                      className="cursor-pointer"
                     />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-muted">
-                      <Building2 className="h-8 w-8 text-muted-foreground" />
-                    </div>
-                  )}
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Format: PNG, JPG, GIF. Max 5MB
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1">
+              </div>
+
+              {/* Informations de l'entreprise */}
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="companyName">Nom de l'entreprise</Label>
                   <Input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleLogoChange}
-                    className="cursor-pointer"
+                    id="companyName"
+                    name="companyName"
+                    value={profile.companyName}
+                    onChange={handleChange}
+                    required
                   />
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Format: PNG, JPG, GIF. Max 5MB
-                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="employeeCount">Nombre d'employés</Label>
+                  <Input
+                    id="employeeCount"
+                    name="employeeCount"
+                    value={profile.employeeCount}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="website">Site web</Label>
+                  <Input
+                    id="website"
+                    name="website"
+                    type="url"
+                    value={profile.website}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="hrEmail">Email RH</Label>
+                  <Input
+                    id="hrEmail"
+                    name="hrEmail"
+                    type="email"
+                    value={profile.hrEmail}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="hrPhone">Téléphone RH</Label>
+                  <Input
+                    id="hrPhone"
+                    name="hrPhone"
+                    type="tel"
+                    value={profile.hrPhone}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="foundingDate">Date de création</Label>
+                  <Input
+                    id="foundingDate"
+                    name="foundingDate"
+                    type="date"
+                    value={profile.foundingDate}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="location">Localisation</Label>
+                  <Input
+                    id="location"
+                    name="location"
+                    value={profile.location}
+                    onChange={handleChange}
+                    required
+                  />
                 </div>
               </div>
-            </div>
 
-            {/* Informations de l'entreprise */}
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="companyName">Nom de l'entreprise</Label>
-                <Input
-                  id="companyName"
-                  name="companyName"
-                  value={profile.companyName}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="employeeCount">Nombre d'employés</Label>
-                <Input
-                  id="employeeCount"
-                  name="employeeCount"
-                  value={profile.employeeCount}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="website">Site web</Label>
-                <Input
-                  id="website"
-                  name="website"
-                  type="url"
-                  value={profile.website}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="hrEmail">Email RH</Label>
-                <Input
-                  id="hrEmail"
-                  name="hrEmail"
-                  type="email"
-                  value={profile.hrEmail}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="hrPhone">Téléphone RH</Label>
-                <Input
-                  id="hrPhone"
-                  name="hrPhone"
-                  type="tel"
-                  value={profile.hrPhone}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="foundingDate">Date de création</Label>
-                <Input
-                  id="foundingDate"
-                  name="foundingDate"
-                  type="date"
-                  value={profile.foundingDate}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="location">Localisation</Label>
-                <Input
-                  id="location"
-                  name="location"
-                  value={profile.location}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-            </div>
-
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Enregistrement...
-                </>
-              ) : (
-                "Enregistrer le profil"
-              )}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Enregistrement...
+                  </>
+                ) : (
+                  "Enregistrer le profil"
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    </RouteProtector>
   )
 } 
