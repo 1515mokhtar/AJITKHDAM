@@ -12,8 +12,8 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!loading && !user) {
       router.push("/login")
-    } else if (!loading && user && user.role !== "company") {
-      router.push("/")
+    } else if (!loading && user && user.role == "chercheur") {
+      router.push("/profile")
     }
   }, [user, loading, router])
 
