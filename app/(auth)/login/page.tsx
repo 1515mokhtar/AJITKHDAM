@@ -50,7 +50,7 @@ export default function LoginPage() {
         case "company":
           return "/profile/entdetails"
         default:
-          return "/dashboard"
+          return "/login"
       }
     }
 
