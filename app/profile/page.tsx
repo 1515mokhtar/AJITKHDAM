@@ -13,7 +13,7 @@ export default function ProfilePage() {
     if (!loading && !user) {
       router.push("/login")
     } else if (!loading && user && user.role !== "company") {
-      router.push("/dashboard")
+      router.push("/")
     }
   }, [user, loading, router])
 
