@@ -1,50 +1,36 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/context/auth-context"
 import { Loader2 } from "lucide-react"
 
 interface RouteProtectorProps {
   children: React.ReactNode
-  allowedRoles: string[]
-  unauthorizedRedirect?: string
-  unauthenticatedRedirect?: string
 }
 
-export function RouteProtector({
-  children,
-  allowedRoles,
-  unauthorizedRedirect = "/unauthorized",
-  unauthenticatedRedirect = "/login",
-}: RouteProtectorProps) {
+export function RouteProtector({ children }: RouteProtectorProps) {
   const { user, isChecking } = useAuth()
   const router = useRouter()
-  const hasRedirected = useRef(false)
+  const [hasRedirected, setHasRedirected] = useState(false)
 
   useEffect(() => {
-    // Ne rien faire tant que la vérification est en cours
     if (isChecking) return
+    if (hasRedirected) return
 
-    // Empêcher les redirections multiples
-    if (hasRedirected.current) return
-
-    // Si l'utilisateur n'est pas connecté
     if (!user) {
-      hasRedirected.current = true
-      router.push(unauthenticatedRedirect)
+      setHasRedirected(true)
+      router.push("/login")
       return
     }
 
-    // Si l'utilisateur n'a pas le rôle requis
-    if (!allowedRoles.includes(user.role || "")) {
-      hasRedirected.current = true
-      router.push(unauthorizedRedirect)
-      return
+    // Redirection basée sur le rôle
+    if (user.role === "chercheur") {
+      setHasRedirected(true)
+      router.push("https://ajitkhdam.vercel.app/profile/details")
     }
-  }, [user, isChecking, router, allowedRoles, unauthorizedRedirect, unauthenticatedRedirect])
+  }, [user, isChecking, router, hasRedirected])
 
-  // Afficher un loader pendant la vérification
   if (isChecking) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -56,11 +42,5 @@ export function RouteProtector({
     )
   }
 
-  // Si l'utilisateur est connecté et a le bon rôle, afficher le contenu
-  if (user && allowedRoles.includes(user.role || "")) {
-    return <>{children}</>
-  }
-
-  // Par défaut, ne rien afficher (la redirection sera gérée par l'effet)
-  return null
+  return <>{children}</>
 } 

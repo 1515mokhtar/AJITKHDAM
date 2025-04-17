@@ -57,12 +57,23 @@ export default function Navbar() {
 
       try {
         const db = getFirestore()
-        const profileRef = doc(db, "profiles", user.uid)
-        const profileDoc = await getDoc(profileRef)
-        const profileData = profileDoc.data()
+        const userRef = doc(db, "users", user.uid)
+        const userDoc = await getDoc(userRef)
         
-        setIsProfileComplete(profileData?.profileCompleted === 'yes')
-        setUserRole(profileData?.role || user.role || null)
+        if (userDoc.exists()) {
+          const userData = userDoc.data()
+          
+          // Vérifier si l'utilisateur a le rôle "company"
+          if (userData.role === "company") {
+            // Vérifier les champs profileComplete et profileCompleted
+            const isComplete = userData.profileComplete === true && userData.profileCompleted === "yes"
+            setIsProfileComplete(isComplete)
+          } else {
+            setIsProfileComplete(false)
+          }
+          
+          setUserRole(userData.role || null)
+        }
       } catch (error) {
         console.error("Erreur lors de la vérification du statut du profil:", error)
         setIsProfileComplete(false)
@@ -72,13 +83,17 @@ export default function Navbar() {
       }
     }
 
-    checkProfileStatus()
+    const timer = setTimeout(() => {
+      checkProfileStatus()
+    }, 500)
+
+    return () => clearTimeout(timer)
   }, [user])
 
   // Déterminer le lien du profil en fonction du rôle de l'utilisateur
   const getProfileLink = () => {
     if (userRole === "company") {
-      return "/profile/entdetails"
+      return "/profile/entdetails/profileentreprise"
     }
     return isProfileComplete ? "/profile/details" : "/profile"
   }
