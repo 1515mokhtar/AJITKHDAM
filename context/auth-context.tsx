@@ -73,10 +73,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isInitialized = useRef(false)
 
   useEffect(() => {
+    // Empêcher l'exécution multiple de l'effet
+    if (isInitialized.current) return
+    isInitialized.current = true
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setIsChecking(true)
-      if (firebaseUser) {
-        try {
+      try {
+        if (firebaseUser) {
           console.log("Utilisateur authentifié:", firebaseUser.email)
 
           // Mettre à jour la dernière connexion
@@ -85,21 +89,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               lastLogin: serverTimestamp(),
             })
           } catch (error) {
-            console.log("Impossible de mettre à jour la dernière connexion, l'utilisateur est peut-être nouveau")
+            console.log("Impossible de mettre à jour la dernière connexion")
           }
 
           const userDoc = await getDoc(doc(db, "users", firebaseUser.uid))
 
           if (userDoc.exists()) {
             console.log("Document utilisateur trouvé dans Firestore")
-            const userData = userDoc.data();
-            setUser({
+            const userData = userDoc.data()
+            const userWithRole = {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
               photoURL: firebaseUser.photoURL || undefined,
-              role: userData.role || "chercheur", // Assurer qu'un rôle par défaut est défini
+              role: userData.role || "chercheur",
               ...(userData as Omit<User, "uid" | "email" | "photoURL" | "role">),
-            })
+            }
+            
+            setUser(userWithRole)
             
             // Récupérer le profil si nécessaire
             if (userData.role) {
@@ -115,12 +121,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } else {
             // L'utilisateur existe dans Auth mais pas dans Firestore
-            console.log("L'utilisateur existe dans Auth mais pas dans Firestore, création du document")
+            console.log("Création du document utilisateur dans Firestore")
             const userData = {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
               name: firebaseUser.displayName || "Utilisateur",
-              role: "chercheur", // Rôle par défaut
+              role: "chercheur",
               createdAt: serverTimestamp(),
               lastLogin: serverTimestamp(),
               savedJobs: [],
@@ -136,34 +142,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               email: firebaseUser.email,
               name: firebaseUser.displayName || undefined,
               photoURL: firebaseUser.photoURL || undefined,
-              role: "chercheur", // Rôle par défaut
+              role: "chercheur",
               authProvider: firebaseUser.providerData[0]?.providerId === "google.com" ? "google" : "email",
               profileCompleted: "no",
             })
           }
-        } catch (error) {
-          console.error("Erreur lors de la récupération des données utilisateur:", error)
-          // Définir les informations utilisateur de base si la récupération Firestore échoue
-          setUser({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            name: firebaseUser.displayName || undefined,
-            photoURL: firebaseUser.photoURL || undefined,
-            authProvider: firebaseUser.providerData[0]?.providerId === "google.com" ? "google" : "email",
-            profileCompleted: "no",
-          })
+        } else {
+          console.log("Aucun utilisateur authentifié")
+          setUser(null)
+          setProfile(null)
+          setIsProfileComplete(false)
         }
-      } else {
-        console.log("Aucun utilisateur authentifié")
+      } catch (error) {
+        console.error("Erreur lors de la récupération des données utilisateur:", error)
         setUser(null)
         setProfile(null)
         setIsProfileComplete(false)
+      } finally {
+        setLoading(false)
+        setIsChecking(false)
       }
-      setLoading(false)
-      setIsChecking(false)
     })
 
-    return () => unsubscribe()
+    return () => {
+      unsubscribe()
+      isInitialized.current = false
+    }
   }, [])
 
   const createUser = async (data: SignUpData): Promise<boolean> => {

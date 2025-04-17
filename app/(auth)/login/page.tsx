@@ -1,8 +1,7 @@
 "use client"
 
 import type React from "react"
-
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -23,11 +22,15 @@ export default function LoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirect = searchParams.get("redirect") || "/dashboard"
+  const hasRedirected = useRef(false)
 
   // Rediriger si déjà connecté et que la vérification est terminée
   useEffect(() => {
-    if (!isChecking && user) {
-      router.push(redirect)
+    if (!isChecking && user && !hasRedirected.current) {
+      if (user.role === "chercheur") {
+        hasRedirected.current = true
+        router.push(redirect)
+      }
     }
   }, [user, router, redirect, isChecking])
 
@@ -59,11 +62,8 @@ export default function LoginPage() {
     setError(null)
 
     try {
-      const success = await signIn(email, password)
-
-      if (success) {
-        router.push(redirect)
-      }
+      await signIn(email, password)
+      // La redirection sera gérée par l'effet useEffect
     } catch (error: any) {
       console.error("Erreur inattendue lors de la connexion:", error)
       setError("Une erreur inattendue s'est produite. Veuillez réessayer.")
@@ -81,8 +81,8 @@ export default function LoginPage() {
       const result = await signInWithGoogle()
 
       if (result.success) {
-        console.log("Connexion Google réussie, redirection vers:", redirect)
-        router.push(redirect)
+        console.log("Connexion Google réussie")
+        // La redirection sera gérée par l'effet useEffect
       } else if (result.isNewUser) {
         // Rediriger vers la page d'inscription si c'est un nouvel utilisateur
         console.log("Nouvel utilisateur Google, redirection vers l'inscription")
